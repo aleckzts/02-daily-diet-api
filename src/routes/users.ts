@@ -14,8 +14,45 @@ export async function usersRoutes(app: FastifyInstance) {
       })
       .first()
 
+    const totalMealsOnDiet = await knex('meals')
+      .where({ user_id: userId, included: true })
+      .count('id', { as: 'total' })
+      .first()
+
+    const totalMealsOffDiet = await knex('meals')
+      .where({ user_id: userId, included: false })
+      .count('id', { as: 'total' })
+      .first()
+
+    const totalMeals = await knex('meals')
+      .where({ user_id: userId })
+      .orderBy('created_at', 'desc')
+
+    const { bestOnDietSequence } = totalMeals.reduce(
+      (acc, meal) => {
+        if (meal.included) {
+          acc.currentSequence += 1
+        } else {
+          acc.currentSequence = 0
+        }
+
+        if (acc.currentSequence > acc.bestOnDietSequence) {
+          acc.bestOnDietSequence = acc.currentSequence
+        }
+
+        return acc
+      },
+      { bestOnDietSequence: 0, currentSequence: 0 },
+    )
+
     return {
       user,
+      meals: {
+        totalMeals: totalMeals.length,
+        totalMealsOnDiet: totalMealsOnDiet?.total,
+        totalMealsOffDiet: totalMealsOffDiet?.total,
+        bestOnDietSequence,
+      },
     }
   })
 
@@ -47,13 +84,13 @@ export async function usersRoutes(app: FastifyInstance) {
         path: '/',
         maxAge: 60 * 60 * 24 * 7, // 7 days
       })
-    } else {
-      await knex('users').insert({
-        id: userId,
-        name,
-        avatar,
-      })
     }
+
+    await knex('users').insert({
+      id: userId,
+      name,
+      avatar,
+    })
 
     return reply.status(201).send()
   })
